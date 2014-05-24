@@ -1,0 +1,44 @@
+#!/bin/bash
+set -e ; sudo -v # No any errors should happen ..
+[[ "$EUID" == 0 ]] || { echo 'Please run this script as root.'>&2; exit 1; }
+############################### GATHERING INFO ################################
+if [[ -n "$(which aptitude)" ]];then sudo aptitude install valgrind; exit $? ; fi
+clear
+echo 'Loading Info ..'
+declare -r MAIN_SITE='http://valgrind.org' RELEASES_SITE="$(curl -Ls 'http://valgrind.org/downloads/current.html')"
+declare names=() ; IFS=$' \t\n'
+
+function install {
+    declare -r PRODUCT_INFO="$(echo "$RELEASES_SITE" | egrep -i "<h([2-4])>$1 ([0-9]\.){2}[0-9]</h\1>" -m1 -A10)"
+    declare -r LATEST_VERSION="$(echo "$PRODUCT_INFO" | egrep '([0-9]\.){2}[0-9]' -om1)"
+    declare -r DOWNLOAD_SITE="${MAIN_SITE}$(echo "$PRODUCT_INFO" | egrep '<p><a href="/.+"' -o | egrep '".+"' -o | egrep '[^"]+' -o)"
+    declare -r FILE_NAME="$(basename "$DOWNLOAD_SITE")"
+    declare -r MD5_HASH="$(echo "$PRODUCT_INFO" | egrep 'md5: (.+)</s' -o | sed -E 's/md5: |<\/s//g')"
+    wget -c "$DOWNLOAD_SITE"
+    tar xjf "$FILE_NAME"
+    cd "$(echo $1 | tr [[:upper:]] [[:lower:]])-$LATEST_VERSION"
+    for file in "autogen.sh" "configure";do
+        if [[ -x "$file" ]];then ./$file;fi
+    done ; make ; sudo make install ; cd -
+}
+
+for name in $(echo "$RELEASES_SITE" | egrep '\w{1,9}-([0-9]\.){2}[0-9]' -o);do # getting all product names ..
+    name="$(echo "$name" | sed -E 's/-([0-9]\.){2}[0-9]//')" ; found=false # getting the name
+    for i in ${names[@]};do if [[ "$i" == "$name" ]];then found=true ; break ; fi ;done # checking if it is there ..
+    if ! $found;then names[${#names[@]}]="$name";fi
+done ; clear
+
+for ((i=0;i<${#names[@]};i++));do
+    names[$i]="$(echo ${names[$i]:0:1} | tr [[:lower:]] [[:upper:]])${names[$i]:1}"
+done
+
+if [[ "$1" -ne '-q' ]];then
+    echo 'Which product to install ?'
+    select product in ${names[@]};do
+        if [[ -n "$product" ]];then break;else continue; fi
+    done
+else
+    for product in "${names[@]}";do # install everything
+        install "$product"
+    done
+fi
