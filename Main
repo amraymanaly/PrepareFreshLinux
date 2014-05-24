@@ -1,15 +1,26 @@
 #!/bin/bash
-#
-# This is the main Script for preparing Linux Systems for Use after a Fresh Install !
-#
-#	BUGS: NONE
-#
+#  This is the main Script for preparing Linux Systems for Use after a Fresh Install !
 [[ $EUID == 0 ]] || { echo 'Please run this script as root';exit 1; }
 if [[ -z "$(which aptitude)" ]] || [[ -z "$(which dpkg)" ]];then
-    echo 'This script is (currently) meant to run only on debian-based systems ..'
+    echo 'This script is (currently) meant to run only on debian-based systems with the aptitude package manager ..'
     exit 1
 fi
 
+function clean {
+    [[ -z "$1" ]] || notify-send "Work Done with $1 .."
+    sudo dpkg --configure -a
+    sudo aptitude clean --full-resolver
+    sudo aptitude autoclean --purge-unused
+}
+###### checking needed applications
+clean ; clear
+for application in 'uname' 'wget' 'notify-send' 'lsb_release' 'which' 'add-apt-repository' 'mktemp'\
+'bash' 'sleep' 'ping' 'sed' 'service' 'swapoff' 'swapon' 'grep' 'egrep' 'printf';do
+    if [[ -z "$(which "$application")" ]];then
+        echo "Installing $application ( needed to run the script ) .."
+        sudo aptitude install "$application" || { echo "$application failed to install .."; exit 1; }
+    fi
+done
 cd "${0%/*}" ; clear
 echo "Congratulations for Installing $(lsb_release -ds)"'!' ; sleep 3 ; clear
 declare -r BITS64=$([[ "$(uname -i)" == 'x86_64' ]] && echo true || echo false) ; clear
@@ -20,7 +31,7 @@ function Verified {
     ${criteria=true} || return 0
     if [[ -n "$2" ]];then
         if [[ -n "$(which "$2")" ]];then
-            notify-send "$1 was found to be installed .."
+            notify-send "$1 was found to be already installed .."
             return 1
         fi
     fi
@@ -32,17 +43,12 @@ function Verified {
         return 1
     fi
 }
-function clean {
-    [[ -z "$1" ]] || notify-send "Work Done with $1 .."
-    sudo dpkg --configure -a
-    sudo aptitude clean --full-resolver
-    sudo aptitude autoclean --purge-unused
-}
 
 echo 'Checking Internet Connection ..'
 ping -c3 'www.google.com' &>/dev/null || { echo 'Unable to Connect to Internet or either slow speed';exit 1; }
 sleep 2 ; clear
 ############################################ STARTING WORK ###############################
+declare PROGRAMMER=false DESIGNER=false
 until [[ "$user_type" -le 3 ]] && [[ -n "$user_type" ]];do
     clear
     printf "What kind of software do you happen to often use ?\n\t1. Programming Software\n\t\
@@ -51,16 +57,11 @@ until [[ "$user_type" -le 3 ]] && [[ -n "$user_type" ]];do
 done
 if [[ "$user_type" == 1 ]];then
     PROGRAMMER=true
-    DESIGNER=false
 elif [[ "$user_type" == 2 ]];then
-    PROGRAMMER=false
     DESIGNER=true
 elif [[ "$user_type" == 3 ]];then
     PROGRAMMER=true
     DESIGNER=true
-else # Unknown ( typical user )
-    PROGRAMMER=false
-    DESIGNER=false
 fi
 declare -r PROGRAMMER DESIGNER
 
@@ -108,8 +109,9 @@ fi
 
 if Verified 'Google Chrome' google-chrome;then
     sudo aptitude install -y libxss1 &>/dev/null
-    echo 'Downloading Google Chrome ..' ; temp_dir="$(mktemp -d)" ; cd "$temp_dir"
-    site="$(printf 'https://dl.google.com/linux/direct/google-chrome-stable_current_%s.deb' "$($BITS64&&echo 'amd64'||echo 'i386')")"
+    echo 'Downloading Google Chrome ..'
+    temp_dir="$(mktemp -d)" ; cd "$temp_dir"
+    site="https://dl.google.com/linux/direct/google-chrome-stable_current_$($BITS64&&echo 'amd64'||echo 'i386').deb"
     wget -v "$site" -o "chrome.deb" ; sudo dpkg -i 'chrome.deb' ; cd - ; rm -r "$temp_dir"
 fi
 
