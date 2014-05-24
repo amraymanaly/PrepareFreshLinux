@@ -27,10 +27,9 @@ declare -r BITS64=$([[ "$(uname -i)" == 'x86_64' ]] && echo true || echo false) 
 
 function Verified {
     $CHOICE || return 0
-    criteria=$3
-    ${criteria=true} || return 0
-    if [[ -n "$2" ]];then
-        if [[ -n "$(which "$2")" ]];then
+    $2 || return 1
+    if [[ -n "$3" ]];then
+        if [[ -n "$(which "$3")" ]];then
             notify-send "$1 was found to be already installed .."
             return 1
         fi
@@ -48,21 +47,19 @@ echo 'Checking Internet Connection ..'
 ping -c3 'www.google.com' &>/dev/null || { echo 'Unable to Connect to Internet or either slow speed';exit 1; }
 sleep 2 ; clear
 ############################################ STARTING WORK ###############################
-declare PROGRAMMER=false DESIGNER=false
-until [[ "$user_type" -le 3 ]] && [[ -n "$user_type" ]];do
+declare PROGRAMMER=false DESIGNER=false WEBDEV=false
+until [[ "$user_type" -le 5 ]] && [[ -n "$user_type" ]];do
     clear
-    printf "What kind of software do you happen to often use ?\n\t1. Programming Software\n\t\
-2. Graphics Designer Software\n\t3. [The first Two] ..\n\t4. Other ..\n\t"
+    printf "What do you happen to often use Software for ?\n\t1. Programming\n\t\
+2. Graphics Design\n\t3. The first Two ( includes web design ) ..\n\t\n\t4. Web Development .. \n\t5. Normal User Software ..\n\t"
     read -p 'The Number of your choice is: ' user_type
 done
-if [[ "$user_type" == 1 ]];then
-    PROGRAMMER=true
-elif [[ "$user_type" == 2 ]];then
-    DESIGNER=true
-elif [[ "$user_type" == 3 ]];then
-    PROGRAMMER=true
-    DESIGNER=true
-fi
+case "$user_type" in
+    1 ) PROGRAMMER=true;;
+    2 ) DESIGNER=true;;
+    3 ) PROGRAMMER=true ; DESIGNER=true;;
+    4 ) WEBDEV=true ; PROGRAMMER=true;;
+esac
 declare -r PROGRAMMER DESIGNER
 
 until [[ "$CHOICE" -le 2 ]] && [[ -n "$CHOICE" ]];do
@@ -103,11 +100,11 @@ fi
 
 cd /etc/xdg/autostart/ ; sudo sed -i 's/NoDisplay=true/NoDisplay=false/g' *.desktop ; cd -
 
-if Verified 'Sublime Text' subl $PROGRAMMER;then
+if Verified 'Sublime Text' $PROGRAMMER subl;then
     sudo bash subl_install ; clean 'Sublime Text'
 fi
 
-if Verified 'Google Chrome' google-chrome;then
+if Verified 'Google Chrome' true google-chrome;then
     sudo aptitude install -y libxss1 &>/dev/null
     echo 'Downloading Google Chrome ..'
     temp_dir="$(mktemp -d)" ; cd "$temp_dir"
@@ -115,16 +112,18 @@ if Verified 'Google Chrome' google-chrome;then
     wget -v "$site" -o "chrome.deb" ; sudo dpkg -i 'chrome.deb' ; cd - ; rm -r "$temp_dir"
 fi
 
-if Verified 'VLC' vlc;then
+if Verified 'VLC' true vlc;then
     sudo aptitude install vlc -y ; clean 'VLC'
 fi
 
-if Verified 'Unity Tweak' unity-tweak-tool;then
+if Verified 'Unity Tweak' true unity-tweak-tool;then
     sudo aptitude install unity-tweak-tool -y ; clean
 fi
 
-if Verified 'Eclipse (C/C++)' eclipse $PROGRAMMER;then
+if Verified 'Eclipse (C/C++)' $PROGRAMMER eclipse;then
     sudo aptitude install eclipse-cdt -y # because the jdk is going to be installed anyway with eclipse
+elif Verified 'Eclipse (Classic)' $PROGRAMMER eclipse;then
+    sudo aptitude install eclipse -y
 elif Verified 'Java' java; then
     if $CHOICE;then
         until echo "$typ" | egrep -qi '^j(dk|re)$';do
@@ -137,7 +136,10 @@ elif Verified 'Java' java; then
 fi ; clean 'Java'
 
 if Verified 'Gimp' gimp $DESIGNER;then
-    sudo aptitude install gimp
+    sudo aptitude install gimp -y
+fi
+if Verified 'LAMP Bundle (MySQL - PHP - Apache)'; then
+    sudo bash lamp_install
 fi
 if Verified 'Tlp ( battery life & heat improvement )' tlp-rdw;then
     sudo add-apt-repository ppa:linrunner/tlp -y
