@@ -50,8 +50,8 @@ sleep 2 ; clear
 declare PROGRAMMER=false DESIGNER=false WEBDEV=false
 until [[ "$user_type" -le 5 ]] && [[ -n "$user_type" ]];do
     clear
-    printf "What do you happen to often use Software for ?\n\t1. Programming\n\t\
-2. Graphics Design\n\t3. The first Two ( includes web design ) ..\n\t\n\t4. Web Development .. \n\t5. Normal User Software ..\n\t"
+    printf "What do you happen to often use Software for ?\n\t1. Programming\n\t2. Graphics Design\n\t\
+3. The first Two ( includes web design ) ..\n\t\n\t4. Web Development .. \n\t5. Typical Computing ..\n\t"
     read -p 'The Number of your choice is: ' user_type
 done
 case "$user_type" in
@@ -60,7 +60,7 @@ case "$user_type" in
     3 ) PROGRAMMER=true ; DESIGNER=true;;
     4 ) WEBDEV=true ; PROGRAMMER=true;;
 esac
-declare -r PROGRAMMER DESIGNER
+declare -r PROGRAMMER DESIGNER WEBDEV
 
 until [[ "$CHOICE" -le 2 ]] && [[ -n "$CHOICE" ]];do
     clear
@@ -109,7 +109,9 @@ if Verified 'Google Chrome' true google-chrome;then
     echo 'Downloading Google Chrome ..'
     temp_dir="$(mktemp -d)" ; cd "$temp_dir"
     site="https://dl.google.com/linux/direct/google-chrome-stable_current_$($BITS64&&echo 'amd64'||echo 'i386').deb"
-    wget -v "$site" -o "chrome.deb" ; sudo dpkg -i 'chrome.deb' ; cd - ; rm -r "$temp_dir"
+    wget -v "$site" -o "chrome.deb"
+    sudo dpkg -i 'chrome.deb'
+    cd - ; rm -r "$temp_dir"
 fi
 
 if Verified 'VLC' true vlc;then
