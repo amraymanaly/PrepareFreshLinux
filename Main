@@ -148,7 +148,7 @@ if Verified 'LAMP Bundle (MySQL - PHP - Apache)'; then
     sudo bash lamp_install
 fi
 if Verified 'Valgrind & Valkyrie (C/C++ Debugger)' $PROGRAMMER;then # inconsistent, bec it isn't suitable for a web developer ..
-    sudo bash valgrind_install
+    sudo bash valgrind_install -q
 fi
 if Verified 'Tlp (battery life & heat improvement)' tlp-rdw;then
     sudo add-apt-repository ppa:linrunner/tlp -y
