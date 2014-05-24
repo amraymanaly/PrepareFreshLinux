@@ -1,0 +1,112 @@
+#!/bin/bash
+# Usage: {script} [ OPTIONS ] TARGET BUILD
+# 
+#   TARGET      Default target is "/opt".
+#   BUILD       If not defined tries to get the build into the Sublime Text 3 website.
+[[ "$EUID" == 0 ]] || { echo 'Please run this script as root.'>&2; exit 1; }
+###############################################################################
+declare -r MAIN_SITE='http://www.sublimetext.com' TARGET='/opt'
+declare -r DOWNLOADS_SITE='http://c758482.r82.cf2.rackcdn.com'
+declare URL ARCHIVE_NAME MAJOR_VERSION MAJOR_VERSION STABLE_VERSION ONLY_STABLE
+declare -r UNSTABLE_FORMAT="${DOWNLOADS_SITE}/sublime_text_%d_build_%d_x%d.tar.bz2"
+declare -r STABLE_FORMAT="${DOWNLOADS_SITE}/Sublime Text %s x%d.tar.bz2"
+declare -r DEB_FORMAT="${DOWNLOADS_SITE}/sublime-text_build-%d_%s.deb"
+declare -r BITS=$([[ "$(uname -m)" == "x86_64" ]]&& echo 64 || echo 32)
+declare DEB BUILD GET_DEB INFO DEBIAN_BASED GET_STABLE
+declare -r DEBIAN_BASED=$([[ -n "$(which dpkg)" && -n "$(which aptitude)" ]] && echo true || echo false);
+############################################## Gathering INFO ######################
+if $DEBIAN_BASED;then
+    echo 'Initializing Installation ..'
+    sudo dpkg --configure -a
+    sudo aptitude install curl
+elif [[ -z "$(which curl)" ]];then
+    echo 'Please install curl through your package manager or through the internet before running this script.' >&2
+    exit 1
+fi
+###############################################################################
+echo 'Checking Latest Version ..'
+for VERSION in {7..3}; do
+    curl -Ls "http://sublimetext.com/$VERSION" | grep -q '404 Not Found' && continue
+    if curl -Ls "${MAIN_SITE}/$VERSION" | grep -q 'Version'; then # it is a stable version
+        ONLY_STABLE=true
+        STABLE_VERSION=$VERSION
+    else
+        ONLY_STABLE=false
+        UNSTABLE_VERSION=$VERSION
+        STABLE_VERSION=$(curl -Ls "${MAIN_SITE}/$((VERSION-1))" | grep -m1 'Version [0-9]' | cut -d '>' -f2 | cut -d '<' -f1 | egrep -o '([0-9]|\.)+')
+    fi ; break
+done
+###############################################################################
+if ! $ONLY_STABLE;then
+    BUILD=$(
+        curl -Ls ${MAIN_SITE}/${UNSTABLE_VERSION} |
+        grep '<h2>Build' | head -n1 | sed -E 's#<h2>Build ([0-9]+)</h2>#\1#g'
+    )
+    printf "Which Version do you want to Install ?\n\t1. The Stable Version (Sublime Text %s)" "$STABLE_VERSION"
+    printf "\n\t2. The UnStable Version (Sublime Text %s, BUILD: %s)\n\t" "$UNSTABLE_VERSION" "$BUILD"
+    read -p 'The Number of Choice is: ' ch
+    GET_STABLE=$([[ $ch == 1 ]] && echo true || echo false)
+else
+    GET_STABLE=true
+fi
+declare -r ONLY_STABLE STABLE_VERSION UNSTABLE_VERSION BUILD GET_STABLE
+###############################################################################
+if $GET_STABLE;then
+    URL=$(printf "${STABLE_FORMAT}" "${STABLE_VERSION}" "${BITS}");URL="${URL// /%20}"
+    INFO="Sublime Text $STABLE_VERSION ($BITS-bit)"
+    MAJOR_VERSION="${STABLE_VERSION:0:1}"
+    ARCHIVE_NAME="sublime_text_${MAJOR_VERSION}_x${BITS}.tar.bz2"
+else
+    URL=$(printf "${UNSTABLE_FORMAT}" "${UNSTABLE_VERSION}" "${BUILD}" "${BITS}")
+    INFO="Sublime Text $UNSTABLE_VERSION, BUILD: $BUILD ($BITS-bit)"
+    MAJOR_VERSION="${UNSTABLE_VERSION:0:1}"
+    DEB=$(printf "$DEB_FORMAT" "$BUILD" "$([[ $BITS == 64 ]] && echo amd64 || echo i386)")
+    ARCHIVE_NAME="$(basename "$DEB")"
+fi
+declare -r URL INFO ARCHIVE_NAME MAJOR_VERSION
+###############################################################################
+temp_file="$(mktemp)" ; cd "$temp_file"
+if $DEBIAN_BASED && # because we're installing a .deb file ..
+    ! $GET_STABLE && # because the debian version will always reference the unstable version
+    curl -Ls "http://sublimetext.com/$MAJOR_VERSION" | grep -q "$DEB"
+then
+    wget -v "$DEB" -O "$ARCHIVE_NAME"
+    sudo dpkg -i "$ARCHIVE_NAME" ; CODE=$?
+    cd - ; rm -r "$temp_file"
+    notify-send 'Done installing sublime text .. ( as a debian package )'
+    exit $CODE
+fi
+###############################################################################
+if [[ -d '/opt/Sublime Text*' ]] && [[ -x '/usr/share/applications/sublime.desktop' ]] ; then
+    read -p 'Sublime Text exists, do you want to overwrite it ? [Y/N]: '
+    if [[ ${#REPLY} -le 4 ]] && [[ ${REPLY:0:1} == 'y' ]]; then
+        sudo rm -fr '/opt/Sublime Text*' &>/dev/null
+        sudo rm -fr '/opt/sublime_text*' &>/dev/null
+        sudo rm -f '/usr/bin/subl*' &>/dev/null
+        sudo rm -f '/usr/share/applications/sublime.desktop' &>/dev/null
+        sudo sed -i 's/sublime\.desktop/gedit.desktop/g' '/usr/share/applications/defaults.list'
+    fi
+fi
+wget -v "$URL" -O "$ARCHIVE_NAME"
+tar -xjf "$ARCHIVE_NAME"
+sudo cp -r "sublime_text_$MAJOR_VERSION" "$TARGET/sublime_text"
+declare -r INSTALLATION_DIR="${TARGET}/sublime_text"
+############################## Integrating with the System ##############################
+###### Managing the .desktop file ..
+sed -Ee "s#/opt#${TARGET}#g" -e 's/Exec=(\w)+/Exec=subl/g' \
+    -e "s#Icon=(\w)+#Icon=${INSTALLATION_DIR}/Icon/48x48/sublime-text.png#" \
+    -e 's@Exec=(/|\w)+ @Exec=subl @g' \
+    -e "s#Icon=(\w)+#Icon=${INSTALLATION_DIR}/Icon/48x48/sublime-text.png#" \
+    "${INSTALLATION_DIR}/sublime_text.desktop"
+sudo mv "${INSTALLATION_DIR}/sublime_text.desktop" "/usr/share/applications/sublime.desktop"
+sudo chmod +x "/usr/share/applications/sublime.desktop"
+###### Creating the binary file ..
+echo "Creating binary file .."
+sudo ln -s "${INSTALLATION_DIR}/sublime_text" '/usr/bin'
+read -p "Do you want to make Sublime Text $MAJOR_VERSION your default text editor ? [Y/N]: "
+if [[ ${#REPLY} -le 4 ]] && [[ ${REPLY:0:1} == 'y' ]]; then
+    cd '/etc/xdg/autostart/';
+    sudo sed -iE 's/gedit.desktop/sublime.desktop/g' '/usr/share/applications/defaults.list'
+fi
+notify-send 'Done installing sublime text .. ( as a standalone program )'
+exit 0
