@@ -1,118 +1,151 @@
 #!/bin/bash
-#   IMPORTANT BUGS:
-#  1.       Ubuntu-Tweak has a repository to get added ..
-#  2.       Google-Chrome doesn't get to install ..
-#  3.       Added Repositories has to be removed at the end ..
-#  4.       Installations & Upgrades has to be forced ( -y option ) ..
-#  5.       Code has to be cleaned & highly refactored & commented ..
-#  6.       The Script needs to check if the wanting-to-tweak file is already tweaked ..
-#  7.       The Script lacks file configuration tweaks ( except for one, which is pretty lame ) ..
-#  This is the main Script for preparing Linux Systems for Use after a Fresh Install !
-#  This script will be used to invoke the other ones
+#
+# This is the main Script for preparing Linux Systems for Use after a Fresh Install !
+#
+#	BUGS: NONE
+#
 [[ $EUID == 0 ]] || { echo 'Please run this script as root';exit 1; }
-declare BITS=$([[ "$(uname -i)" == 'x86_64' ]] && echo true || echo false);clear
-# declaring functions
-function IsYes {
-	d="$1";if [[ "${d:0:1}" == 'y' ]] && [[  "${#d}" -le 4 ]];then return 0; else return 1;fi
-}
+if [[ -z "$(which aptitude)" ]] || [[ -z "$(which dpkg)" ]];then
+    echo 'This script is (currently) meant to run only on debian-based systems ..'
+    exit 1
+fi
+
+cd "${0%/*}" ; clear
+echo "Congratulations for Installing $(lsb_release -ds)"'!' ; sleep 3 ; clear
+declare -r BITS64=$([[ "$(uname -i)" == 'x86_64' ]] && echo true || echo false) ; clear
+
 function Verified {
-	if ! $choice;then
-		return 0
-	else
-		read -p "Do you want to install $1 ? [Y/N]: " cff
-		if IsYes "${cff=yes}";then notify-send "Installing $1 ..";return 0; else notify-send "Aborting $1 .."; return 1;fi
-	fi
+    $CHOICE || return 0
+    criteria=$3
+    ${criteria=true} || return 0
+    if [[ -n "$2" ]];then
+        if [[ -n "$(which "$2")" ]];then
+            notify-send "$1 was found to be installed .."
+            return 1
+        fi
+    fi
+    if IsYes -p "Do you want to install $1 ? [Y/N]: ";then
+        notify-send "Installing $1 .."
+        return 0
+    else
+        notify-send "Aborting $1 .."
+        return 1
+    fi
 }
-function finalize {
-	if [ -n "$1" ];then notify-send "Work Done with $1 ..";fi;sudo dpkg --configure -a;sudo apt-get autoclean;sudo apt-get autoremove
-	clear;sudo apt-get install -f;clear;axel &>/dev/null
+function clean {
+    [[ -z "$1" ]] || notify-send "Work Done with $1 .."
+    sudo dpkg --configure -a
+    sudo aptitude clean --full-resolver
+    sudo aptitude autoclean --purge-unused
 }
-##################################################################### Talking with the User ###############################################
-cd "${0%/*}";read -p "Congratulations for Installing $(lsb_release -ds)"'!';clear
-printf "What do you want ?\n\t1. To Get Prompted before each (non-important) installation ..\n\t2. To Just Install everything quietly ..\n\tPS: Accept is given to any skipped prompt .. and remember:\n\t\tIf you want to skip anything, just use (ctrl-c) ;)\n\t"
-read -p 'The Number of your choice is: ' choice;echo "Checking Internet Connection .."
-if ! sudo add-apt-repository ppa:linrunner/tlp -y &>/dev/null;then
-        echo 'Unable to Connect to Internet or either slow speed';exit 1
-fi;echo 'Established an Internet Connection !';sleep 3;clear
-choice=$([[ $choice == 1 ]] && echo true || echo false)
-notify-send 'Updating Cache ..';sudo apt-get update
-sudo dpkg --configure -a
-#finalize
-#  1: Install Important Utitilites
-	sudo apt-get remove --purge fglrx fglrx_* fglrx-amdcccle* fglrx-dev* &>/dev/null
-	sudo rm /etc/X11/xorg.conf &>/dev/null
-	# sudo apt-get install --reinstall xserver-xorg-core xserver-xorg-video-intel libgl1-mesa-glx \
- #              libgl1-mesa-dri libgl1-mesa-glx:i386 libgl1-mesa-dri:i386 -y
-	sudo dpkg-reconfigure xserver-xorg;clear
-	sudo service apport stop ; sudo sed -ibak -e s/^enabled\=1$/enabled\=0/ /etc/default/apport
-              sudo apt-get install axel curl lynx build-essential cdbs fakeroot dh-make debhelper debconf libstdc++6 gconf-editor -y zenity
-	# swap optimization
-	fd="$HOME/Desktop/test.$RANDOM";fd2="$HOME/Desktop/tester.$RANDOM"
-	echo '# Decrease swap usage to a workable level' > "$fd"
-	echo 'vm.swappiness=10' >> "$fd"
-	echo '# Improve cache management' >> "$fd"
-	echo 'vm.vfs_cache_pressure=50' >> "$fd"
-	cat '/etc/sysctl.conf' "$fd" > "$fd2"
-	sudo mv -f "$fd2" '/etc/sysctl.conf'
-	sudo sed -i 's@exit 0@/sbin/iwconfig wlan0 power off;exit 0@' '/etc/pm/power.d/wireless'
-	rm "$fd";rm "$fd2"
-	finalize
-if [[ ! -r "$HOME/.config/SUDO_ASKPASS" ]];then
+
+echo 'Checking Internet Connection ..'
+ping -c3 'www.google.com' &>/dev/null || { echo 'Unable to Connect to Internet or either slow speed';exit 1; }
+sleep 2 ; clear
+############################################ STARTING WORK ###############################
+until [[ "$user_type" -le 3 ]] && [[ -n "$user_type" ]];do
+    clear
+    printf "What kind of software do you happen to often use ?\n\t1. Programming Software\n\t\
+2. Graphics Designer Software\n\t3. [The first Two] ..\n\t4. Other ..\n\t"
+    read -p 'The Number of your choice is: ' user_type
+done
+if [[ "$user_type" == 1 ]];then
+    PROGRAMMER=true
+    DESIGNER=false
+elif [[ "$user_type" == 2 ]];then
+    PROGRAMMER=false
+    DESIGNER=true
+elif [[ "$user_type" == 3 ]];then
+    PROGRAMMER=true
+    DESIGNER=true
+else # Unknown ( typical user )
+    PROGRAMMER=false
+    DESIGNER=false
+fi
+declare -r PROGRAMMER DESIGNER
+
+until [[ "$CHOICE" -le 2 ]] && [[ -n "$CHOICE" ]];do
+    clear
+    printf "What do you want ?\n\t1. To Get Prompted before each major installation ..\n\t\
+2. To Just Install everything quietly ..\n\tPS: Accept is given to any skipped prompt .. and remember:\n\t\t\
+If you want to skip anything, just use (ctrl-c) ;)\n\t"
+    read -p 'The Number of your choice is: ' CHOICE
+done ; declare -r CHOICE=$([[ $CHOICE == 1 ]] && echo true || echo false)
+notify-send 'Updating Cache ..' ; sudo aptitude update ; clean
+
+sudo rm /etc/X11/xorg.conf &>/dev/null
+sudo aptitude reinstall -y xserver-xorg-core xserver-xorg-video-intel libgl1-mesa-glx\
+libgl1-mesa-dri libgl1-mesa-glx:i386 libgl1-mesa-dri:i386 curl lynx build-essential cdbs libxss1\
+ubuntu-restricted-extras dkms libqtgui4 wget execstack fakeroot dh-make debhelper debconf\
+libstdc++6 gconf-editor zenity libelfg0 dh-modaliases linux-headers-generic xserver-xorg-core mesa-utils\
+mesa-utils-extra install libgcc1 lib32z1 lib32gcc1 libc6-i386 fancontrol preload realpath git flashplugin-installer bum 2>/dev/null
+sudo dpkg-reconfigure xserver-xorg
+sudo service apport stop
+sudo sed -ibak -e s/^enabled\=1$/enabled\=0/ /etc/default/apport
+
+if ! egrep 'vm.swappiness=[0-9]{1,2}' '/etc/sysctl.conf' ||
+    ! egrep 'vm.vfs_cache_pressure=[0-9]{1,2}' '/etc/sysctl.conf';then
+        echo '# Decrease swap usage to a workable level' >> '/etc/sysctl.conf'
+        echo 'vm.swappiness=10' >> '/etc/sysctl.conf'
+        echo '# Improve cache management' >> '/etc/sysctl.conf'
+        echo 'vm.vfs_cache_pressure=50' >> '/etc/sysctl.conf'
+        sudo sed -i 's@exit 0@/sbin/iwconfig wlan0 power off;exit 0@' '/etc/pm/power.d/wireless'
+        rm "$fd";rm "$fd2" ; clean
+        swapoff -a ; swapon -a
+fi
+
+if egrep "$HOME/.bashrc" 'SUDO_ASKPASS=';then
     echo '#!/bin/bash' > "$HOME/.config/SUDO_ASKPASS"
     echo 'zenity --password --title="Password Prompt"' >> "$HOME/.config/SUDO_ASKPASS"
+    echo 'SUDO_ASKPASS="$HOME/.config/SUDO_ASKPASS"' >> "$HOME/.bashrc"
 fi
-finalize
-sudo apt-get install ubuntu-restricted-extras dkms libqtgui4 wget execstack -y
-sudo apt-get install libelfg0 dh-modaliases linux-headers-generic xserver-xorg-core mesa-utils mesa-utils-extra -y
-finalize
-sudo apt-get install libgcc1 lib32z1 lib32gcc1 libc6-i386 fancontrol preload realpath git flashplugin-installer bum -y
-cd /etc/xdg/autostart/;sudo sed -i 's/NoDisplay=true/NoDisplay=false/g' *.desktop;cd -
-finalize
-#  2: Install Sublime-Text
-if Verified 'Sublime Text';then
-	sudo bash subl_install
+
+cd /etc/xdg/autostart/ ; sudo sed -i 's/NoDisplay=true/NoDisplay=false/g' *.desktop ; cd -
+
+if Verified 'Sublime Text' subl $PROGRAMMER;then
+    sudo bash subl_install ; clean 'Sublime Text'
 fi
-finalize 'Sublime Text'
-#  3: Install Google-Chrome
-google-chrome &>/dev/null # checking if it is already installed
-if [[ $? -eq 127 ]];then # proceeding only if it isn't installed
-	if Verified 'Google Chrome';then
-		sudo apt-get install libxss1 # needed library ..
-		name="$HOME/Downloads/Google_Chrome_$RANDOM.deb"
-		echo 'Downloading Google Chrome ..';mkdir -p "$HOME/Desktop/Temp/Google_Chrome"; cd "$HOME/Desktop/Temp/Google_Chrome"
-		if $BITS;then wget -v 'https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb'
-		else wget -v 'https://dl.google.com/linux/direct/google-chrome-stable_current_i386.deb'; fi
-		sudo dpkg -i google-chrome*
-		sudo rm "$name"
-		
-	fi
+
+if Verified 'Google Chrome' google-chrome;then
+    sudo aptitude install -y libxss1 &>/dev/null
+    echo 'Downloading Google Chrome ..' ; temp_dir="$(mktemp -d)" ; cd "$temp_dir"
+    site="$(printf 'https://dl.google.com/linux/direct/google-chrome-stable_current_%s.deb' "$($BITS64&&echo 'amd64'||echo 'i386')")"
+    wget -v "$site" -o "chrome.deb" ; sudo dpkg -i 'chrome.deb' ; cd - ; rm -r "$temp_dir"
 fi
-#  4: Install VLC
-if Verified 'install VLC';then sudo apt-get install vlc;fi
-finalize 'VLC'
-#  5: Unity & Ubuntu Tweaks
-if Verified 'install Unity Tweak'; then sudo apt-get install unity-tweak-tool -y;fi
-if Verified 'install Ubuntu Tweak'; then sudo apt-get install ubuntu-tweak -y;fi
-finalize 'Tweaks'
-#  6: Java & Eclipse
-if Verified 'install Eclipse (C/C++)';then sudo apt-get install eclipse-cdt -y # because the jdk is going to be installed anyway with eclipse
-elif Verified 'install Java'; then
-	typ='jdk';if $choice;then read -p 'Jdk or Jre ? ' typ;typ="$(echo $typ | tr [[:upper:]] [[:lower:]])";fi
-	sudo apt-get default-$typ
+
+if Verified 'VLC' vlc;then
+    sudo aptitude install vlc -y ; clean 'VLC'
 fi
-finalize 'Java'
-#  7: Update & Finish
-sudo apt-get update && sudo apt-get upgrade
-finalize;notify-send 'Done Preparing '"$(lsb_release -is)"' !'
-#  8: Hardware Improvements
-if Verified 'use Tlp (Improves Battery Life)';then
-	
-	sudo apt-get update
-	sudo apt-get install tlp tlp-rdw -y
-	sudo tlp start
+
+if Verified 'Unity Tweak' unity-tweak-tool;then
+    sudo aptitude install unity-tweak-tool -y ; clean
 fi
-sudo apt-get upgrade;sudo apt-get dist-upgrade
-#  9: Reboot
-# notify-send 'Rebooting after 10 seconds ..'
-# sleep 10
-# sudo reboot
+
+if Verified 'Eclipse (C/C++)' eclipse $PROGRAMMER;then
+    sudo aptitude install eclipse-cdt -y # because the jdk is going to be installed anyway with eclipse
+elif Verified 'Java' java; then
+    if $CHOICE;then
+        until echo "$typ" | egrep -qi '^j(dk|re)$';do
+            read -p 'Jdk or Jre ? ' typ
+        done
+    else
+        typ="$($PROGRAMMER&&echo 'jdk' || echo 'jre')"
+    fi
+    sudo aptitude install default-"$(echo "$typ" | tr [[:upper:]] [[:lower:]])" -y
+fi ; clean 'Java'
+
+if Verified 'Gimp' gimp $DESIGNER;then
+    sudo aptitude install gimp
+fi
+if Verified 'Tlp ( battery life & heat improvement )' tlp-rdw;then
+    sudo add-apt-repository ppa:linrunner/tlp -y
+    sudo aptitude update
+    sudo aptitude install tlp*
+    sudo add-apt-repository ppa:linrunner/tlp -ry
+fi
+
+notify-send 'Rebooting after 10 seconds ..'
+sudo aptitude update
+sudo aptitude dist-upgrade -y
+sudo aptitude full-uprade -y
+sleep 10 ; sudo reboot
