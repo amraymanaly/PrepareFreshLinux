@@ -100,7 +100,7 @@ fi
 
 cd /etc/xdg/autostart/ ; sudo sed -i 's/NoDisplay=true/NoDisplay=false/g' *.desktop ; cd -
 
-if Verified 'Sublime Text' $PROGRAMMER subl;then
+if Verified 'Sublime Text (Sophisticated Text Editor)' $PROGRAMMER subl;then
     sudo bash subl_install ; clean 'Sublime Text'
 fi
 
@@ -132,7 +132,7 @@ elif Verified 'Java' java; then
             read -p 'Jdk or Jre ? ' typ
         done
     else
-        typ="$($PROGRAMMER&&echo 'jdk' || echo 'jre')"
+        typ="$($PROGRAMMER && echo 'jdk' || echo 'jre')"
     fi
     sudo aptitude install default-"$(echo "$typ" | tr [[:upper:]] [[:lower:]])" -y
 fi ; clean 'Java'
