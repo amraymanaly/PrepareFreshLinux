@@ -1,4 +1,8 @@
 #!/bin/bash
+#   IMPORTANT BUG:
+#       1. We need a narrower view for the user needs (ex. a web developer might get eclipse for c/c++ installed,
+#                       beause he is still considered a "programmer")
+#       2. Code needs to be tested ..
 #  This is the main Script for preparing Linux Systems for Use after a Fresh Install !
 [[ $EUID == 0 ]] || { echo 'Please run this script as root';exit 1; }
 if [[ -z "$(which aptitude)" ]] || [[ -z "$(which dpkg)" ]];then
@@ -132,7 +136,7 @@ elif Verified 'Java' java; then
             read -p 'Jdk or Jre ? ' typ
         done
     else
-        typ="$($PROGRAMMER && echo 'jdk' || echo 'jre')"
+        typ="$($PROGRAMMER&&echo 'jdk' || echo 'jre')"
     fi
     sudo aptitude install default-"$(echo "$typ" | tr [[:upper:]] [[:lower:]])" -y
 fi ; clean 'Java'
@@ -143,7 +147,10 @@ fi
 if Verified 'LAMP Bundle (MySQL - PHP - Apache)'; then
     sudo bash lamp_install
 fi
-if Verified 'Tlp ( battery life & heat improvement )' tlp-rdw;then
+if Verified 'Valgrind & Valkyrie (C/C++ Debugger)' $PROGRAMMER;then # inconsistent, bec it isn't suitable for a web developer ..
+    sudo bash valgrind_install
+fi
+if Verified 'Tlp (battery life & heat improvement)' tlp-rdw;then
     sudo add-apt-repository ppa:linrunner/tlp -y
     sudo aptitude update
     sudo aptitude install tlp*
