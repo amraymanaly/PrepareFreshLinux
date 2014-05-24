@@ -1,0 +1,11 @@
+#!/bin/bash
+[[ $EUID == 0 ]] || { echo 'Please run this script as root';exit 1; }
+sudo aptitude  install lamp-server^ phpmyadmin mysql-utilities -y  # that easy !
+declare -r apache_version="$(ls /etc/ | egrep -o 'apache[0-9]')"
+declare -r conf='/etc/phpmyadmin/apache.conf'
+declare -r app_conf="/etc/${apache_version}/${apache_version}.conf"
+if [[ -r "$conf" ]] && [[ -r "$app_conf" ]] && ! grep "Include $conf" "$app_conf" ;then
+    echo "Include $conf" >> "$app_conf"
+fi
+sudo service apache2 restart || sudo apachectl restart
+exit 1
