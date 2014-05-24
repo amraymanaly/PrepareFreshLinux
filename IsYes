@@ -1,0 +1,27 @@
+#!/bin/bash
+#
+# Script to check user verification .. [Y/N]
+#
+#
+function usage {
+    echo -e "$(basename $0) [REPLY]:\n   -p [PROMPT] \
+  -  Instead of just checking REPLY, PROMPT will be asked to the user and evaluated as Yes or No"
+}
+
+declare ppc
+while getopts p: opt 2>/dev/null;do
+    case $opt in
+        'p' ) ppc="$OPTARG";;
+        \? ) usage >&2; exit 2;;
+    esac
+done
+if [[ "$#" == 0 ]];then usage >&2 ; exit 2;fi
+[[ -n "$ppc" ]] && read -p "$ppc" rep || rep="$1"
+rep=$(echo "$rep" | tr [[:upper:]] [[:lower:]])
+
+for i in $(echo $rep);do rep="$i";break;done # get the first work
+if ([[ "${rep:0:1}" == 'y' ]] && [[  "${#rep}" -le 4 ]]) || [[ $rep == 'ok' ]] || [[ $rep == 'sure' ]];then
+    exit 0
+else
+    exit 1
+fi
